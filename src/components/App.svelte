@@ -94,7 +94,7 @@
 </script>
 
 <main>
-  <h1>Internet Usage Project</h1>
+  <h1>How Does Internet Usage Evolve around the World During the Past Two Decades?</h1>
   <div class="slider-container">
     <input
       type="range"
@@ -141,7 +141,7 @@
     font-family: 'Nunito', sans-serif;
     font-weight: 300;
     line-height: 2;
-    font-size: 24px;
+    font-size: 15px;
     color: var(--color-text);
   }
 
