@@ -2,47 +2,41 @@
   import { onMount } from 'svelte';
   import * as d3 from 'd3';
   import { feature } from 'topojson-client';
-  import { geoWinkel3 } from 'd3-geo-projection';
 
   let data = [];
-  let svg;
+  let container;
+  let chartGroup;
+  let legendGroup;
   let selectedYear = 2000;
   let allowedYears = [2000, 2005, 2010, 2015, 2019, 2020, 2021];
   let filteredData = [];
-  let tooltipContent = ''; 
-  let tooltipStyle = 'visibility: hidden; position: absolute;'; 
-  let yearIndex = allowedYears.indexOf(selectedYear); 
+  let tooltipContent = '';
+  let tooltipStyle = 'visibility: hidden; position: absolute;';
+  let yearIndex = allowedYears.indexOf(selectedYear);
 
   onMount(async () => {
     const res = await fetch('Internet_usage_data.csv');
     const csv = await res.text();
     data = d3.csvParse(csv, d3.autoType);
 
-    svg = d3.select('.chart-svg');
+    container = d3.select('.container-svg');
+    chartGroup = container.select('.chart-group');
+    legendGroup = container.select('.legend-group');
+
     filteredData = data.filter(d => d.Year === selectedYear);
     drawChart();
+    drawLegend();
   });
 
   $: yearIndex = allowedYears.indexOf(selectedYear);
   $: if (data.length > 0 && selectedYear) {
     filteredData = data.filter(d => d.Year === selectedYear);
-
-    // Define the zoom behavior
-    const zoom = d3.zoom()
-      .scaleExtent([1, 8]) // Set minimum and maximum scale
-      .on('zoom', ({transform}) => {
-        svg.selectAll('path') // Zoom and pan the map paths
-           .attr('transform', transform);
-        // Optionally, adjust other elements like tooltips or points if necessary
-      });
-
-    svg.call(zoom); // Apply the zoom behavior to the SVG element
-
     drawChart();
   }
 
   async function drawChart() {
-    if (data.length === 0 || !svg.node()) return;
+    if (data.length === 0 || !container.node()) return;
+
     const margin = { top: 20, right: 20, bottom: 20, left: 20 },
           width = 960 - margin.left - margin.right,
           height = 500 - margin.top - margin.bottom;
@@ -51,17 +45,26 @@
     const worldMap = await worldMapResponse.json();
     const countries = feature(worldMap, worldMap.objects.countries).features;
 
+    const projection = d3.geoNaturalEarth1()
+      .scale(230)
+      .translate([width / 2, height / 1.8]);
+    const path = d3.geoPath().projection(projection);
+
+    chartGroup.selectAll("*").remove();
+
     const colorScale = d3.scaleSequential(d3.interpolateYlGnBu)
                          .domain([0, d3.max(filteredData, d => d.Value)]);
 
-    svg.selectAll("*").remove();
+    const zoom = d3.zoom()
+      .scaleExtent([1, 8])
+      .on('zoom', ({ transform }) => {
+        chartGroup.attr('transform', transform);
+        legendGroup.attr('transform', transform); // Apply the same transform to legend
+      });
 
-    const projection = d3.geoEqualEarth() // or d3.geoEqualEarth()
-      .scale(200) // Start with a larger scale
-      .translate([width / 2, height / 1.5]); // Adjust translate values as needed
-    const path = d3.geoPath().projection(projection);
+    container.call(zoom);
 
-    svg.attr('viewBox', `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
+    chartGroup.attr('viewBox', `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
        .selectAll('path')
        .data(countries)
        .enter().append('path')
@@ -72,9 +75,11 @@
        })
        .on('mouseover', (event, d) => {
          const countryData = filteredData.find(fd => fd['Region/Country/Area name'] === d.properties.name);
-         tooltipContent = countryData 
-                          ? `Region: ${countryData['Region/Country/Area name']}, Value: ${countryData.Value}` 
-                          : 'No data';
+         if (countryData) {
+           tooltipContent = `Region: ${countryData['Region/Country/Area name']}, Value: ${countryData.Value}`;
+         } else {
+           tooltipContent = `Region: ${d.properties.name}, No Data`;
+         }
          tooltipStyle = `visibility: visible; top: ${event.pageY}px; left: ${event.pageX}px;`;
        })
        .on('mousemove', (event) => {
@@ -91,6 +96,43 @@
     selectedYear = allowedYears[yearIndex];
     drawChart();
   }
+
+  function drawLegend() {
+    const colorScale = d3.scaleSequential(d3.interpolateYlGnBu)
+                         .domain([0, d3.max(filteredData, d => d.Value)]);
+    const legend = legendGroup;
+
+    const legendData = colorScale.ticks(5).map(d => ({
+      value: d,
+      color: colorScale(d)
+    }));
+
+    const legendTitle = legend.append('text')
+      .attr('class', 'legend-title')
+      .attr('x', -100)
+      .attr('y', 475)
+      .text('Percentage of individuals using the internet');
+
+    const legendX = -99;
+    const legendY = 305;
+    const legendItem = legend.selectAll('.legend-item')
+      .data(legendData)
+      .enter()
+      .append('g')
+      .attr('class', 'legend-item')
+      .attr('transform', (d, i) => `translate(${legendX}, ${legendY + i * 25})`);
+
+    legendItem.append('rect')
+      .attr('width', 20)
+      .attr('height', 20)
+      .attr('fill', d => d.color)
+      .attr('stroke', 'black');
+
+    legendItem.append('text')
+      .attr('x', 30)
+      .attr('y', 15)
+      .text(d => d.value);
+  }
 </script>
 
 <main>
@@ -106,8 +148,15 @@
     />
     <span class="year-label">{selectedYear}</span>
   </div>
-  <svg class="chart-svg" width="960" height="500"></svg>
-  <div class="tooltip" style={tooltipStyle}>{tooltipContent}</div>
+  <div class="graph-container">
+    <svg class="container-svg" width="1290" height="600">
+      <g transform="translate(150, 50)">
+        <g class="chart-group"></g>
+        <g class="legend-group"></g>
+      </g>
+    </svg>
+    <div class="tooltip" style={tooltipStyle}>{tooltipContent}</div>
+  </div>
 </main>
 
 <style>
@@ -128,12 +177,13 @@
     padding: 0;
     box-sizing: border-box;
   }
+
   .slider-container {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 10px;
-    margin: 20px 0;
+    margin: 10px 0;
   }
 
   main {
@@ -152,10 +202,10 @@
   }
 
   .chart-svg {
-    width: 100%; /* Ensure SVG fills the container */
-    height: auto; /* Maintain aspect ratio */
-    display: block; /* Remove default inline behavior */
-    background-color: var(--color-bg); /* Optional: set a background color */
+    width: 100%;
+    height: auto;
+    display: block;
+    background-color: var(--color-bg);
   }
 
   .tooltip {
@@ -164,7 +214,14 @@
     background: rgba(0, 0, 0, 0.75);
     color: white;
     border-radius: 5px;
-    pointer-events: none; /* Ignore mouse events on the tooltip itself */
+    pointer-events: none;
     transition: opacity 0.3s;
   }
+
+  .graph-container {
+    position: relative;
+    display: flex;
+    justify-content: center;
+  }
 </style>
+
