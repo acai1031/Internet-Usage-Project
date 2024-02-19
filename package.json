@@ -6,7 +6,7 @@
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && gh-pages -d build"
+    "deploy": "cross-env BASE_PATH=/Internet-Usage-Project npm run build && gh-pages -d build"
   },
   "devDependencies": {
     "@sveltejs/adapter-auto": "^3.0.0",
